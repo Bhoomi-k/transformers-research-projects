@@ -328,10 +328,10 @@ def main():
 
         # TAPEX uses slow tokenizer internally; use_fast is no longer supported
         # use_fast=model_args.use_fast_tokenizer,  # ❌ removed
-
+        use_fast=False,
         # Deprecated argument in modern transformers
         # token=True if model_args.use_auth_token else None,  # ❌ removed
-
+        
         # Required for BART-based models (prevents tokenization mismatch)
         add_prefix_space=True,
     )

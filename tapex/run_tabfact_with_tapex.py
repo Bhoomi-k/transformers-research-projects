@@ -280,8 +280,19 @@ def main():
     # https://huggingface.co/docs/datasets/loading_datasets.
 
     # Labels
-    label_list = raw_datasets["train"].features["label"].names
+    # label_list = raw_datasets["train"].features["label"].names
+    # num_labels = len(label_list)
+
+    # Handle integer labels from JSON files (modern datasets)
+    if hasattr(raw_datasets["train"].features["label"], "names"):
+        # For ClassLabel (old datasets)
+        label_list = raw_datasets["train"].features["label"].names
+    else:
+        # For integer labels (0/1)
+        label_list = ["Refused", "Entailed"]
+
     num_labels = len(label_list)
+
 
     # Load pretrained model and tokenizer
     #

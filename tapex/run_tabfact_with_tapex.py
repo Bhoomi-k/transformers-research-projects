@@ -68,7 +68,7 @@ class DataTrainingArguments:
     """
 
     dataset_name: Optional[str] = field(
-        default="tab_fact", metadata={"help": "The name of the dataset to use (via the datasets library)."}
+        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
     )
     dataset_config_name: Optional[str] = field(
         default="tab_fact",
@@ -244,7 +244,7 @@ def main():
     #
     # In distributed training, the load_dataset function guarantee that only one local process can concurrently
     # download the dataset.
-    if data_args.dataset_name is not None:
+    if data_args.dataset_name:
         # Downloading and loading a dataset from the hub.
         raw_datasets = load_dataset(
             data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir

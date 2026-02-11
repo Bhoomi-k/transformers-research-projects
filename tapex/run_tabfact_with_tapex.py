@@ -38,7 +38,7 @@ from transformers import (
     DataCollatorWithPadding,
     EvalPrediction,
     HfArgumentParser,
-    TapexTokenizer,
+    AutoTokenizer,
     Trainer,
     TrainingArguments,
     default_data_collator,
@@ -50,7 +50,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.17.0.dev0")
+# check_min_version("4.17.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/text-classification/requirements.txt")
 
@@ -295,14 +295,36 @@ def main():
         token=True if model_args.use_auth_token else None,
     )
     # load tapex tokenizer
-    tokenizer = TapexTokenizer.from_pretrained(
+    # tokenizer = TapexTokenizer.from_pretrained(
+    #     model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
+    #     cache_dir=model_args.cache_dir,
+    #     use_fast=model_args.use_fast_tokenizer,
+    #     revision=model_args.model_revision,
+    #     token=True if model_args.use_auth_token else None,
+    #     add_prefix_space=True,
+    # )
+
+    # TapexTokenizer was REMOVED from modern transformers versions.
+    # TAPEX tokenization is now loaded via AutoTokenizer with remote code.
+
+    tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
-        use_fast=model_args.use_fast_tokenizer,
         revision=model_args.model_revision,
-        token=True if model_args.use_auth_token else None,
+
+        # REQUIRED: loads TAPEX-specific tokenizer logic from the model repo
+        trust_remote_code=True,
+
+        # TAPEX uses slow tokenizer internally; use_fast is no longer supported
+        # use_fast=model_args.use_fast_tokenizer,  # ❌ removed
+
+        # Deprecated argument in modern transformers
+        # token=True if model_args.use_auth_token else None,  # ❌ removed
+
+        # Required for BART-based models (prevents tokenization mismatch)
         add_prefix_space=True,
     )
+
     model = BartForSequenceClassification.from_pretrained(
         model_args.model_name_or_path,
         from_tf=bool(".ckpt" in model_args.model_name_or_path),

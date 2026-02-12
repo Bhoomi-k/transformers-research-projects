@@ -38,7 +38,7 @@ from transformers import (
     DataCollatorWithPadding,
     EvalPrediction,
     HfArgumentParser,
-    AutoTokenizer,
+    BartTokenizer,
     Trainer,
     TrainingArguments,
     default_data_collator,
@@ -318,23 +318,13 @@ def main():
     # TapexTokenizer was REMOVED from modern transformers versions.
     # TAPEX tokenization is now loaded via AutoTokenizer with remote code.
 
-    tokenizer = AutoTokenizer.from_pretrained(
+    # TAPEX uses BART + SentencePiece → must use slow BartTokenizer
+    tokenizer = BartTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
-        revision=model_args.model_revision,
-
-        # REQUIRED: loads TAPEX-specific tokenizer logic from the model repo
-        trust_remote_code=True,
-
-        # TAPEX uses slow tokenizer internally; use_fast is no longer supported
-        # use_fast=model_args.use_fast_tokenizer,  # ❌ removed
-        use_fast=False,
-        # Deprecated argument in modern transformers
-        # token=True if model_args.use_auth_token else None,  # ❌ removed
-        
-        # Required for BART-based models (prevents tokenization mismatch)
         add_prefix_space=True,
     )
+
 
     model = BartForSequenceClassification.from_pretrained(
         model_args.model_name_or_path,
@@ -366,12 +356,24 @@ def main():
     def preprocess_tabfact_function(examples):
         # Tokenize the texts
         def _convert_table_text_to_pandas(_table_text):
-            """Runs the structured pandas table object for _table_text.
-            An example _table_text can be: round#clubs remaining\nfirst round#156\n
-            """
-            _table_content = [_table_row.split("#") for _table_row in _table_text.strip("\n").split("\n")]
-            _table_pd = pd.DataFrame.from_records(_table_content[1:], columns=_table_content[0])
-            return _table_pd
+            rows = [_row.split("#") for _row in _table_text.strip("\n").split("\n")]
+
+            header = rows[0]
+            data_rows = rows[1:]
+            num_cols = len(header)
+
+            fixed_rows = []
+            for r in data_rows:
+                if len(r) < num_cols:
+                  # pad missing cells
+                  r = r + [""] * (num_cols - len(r))
+                elif len(r) > num_cols:
+                  # truncate extra cells
+                  r = r[:num_cols]
+                fixed_rows.append(r)
+
+            return pd.DataFrame(fixed_rows, columns=header)
+
 
         questions = examples["statement"]
         tables = list(map(_convert_table_text_to_pandas, examples["table_text"]))
@@ -502,3 +504,4 @@ def _mp_fn(index):
 
 if __name__ == "__main__":
     main()
+

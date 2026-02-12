@@ -354,33 +354,32 @@ def main():
     max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
 
     def preprocess_tabfact_function(examples):
-        # Tokenize the texts
-        def _convert_table_text_to_pandas(_table_text):
-            rows = [_row.split("#") for _row in _table_text.strip("\n").split("\n")]
-
-            header = rows[0]
-            data_rows = rows[1:]
-            num_cols = len(header)
-
-            fixed_rows = []
-            for r in data_rows:
-                if len(r) < num_cols:
-                  # pad missing cells
-                  r = r + [""] * (num_cols - len(r))
-                elif len(r) > num_cols:
-                  # truncate extra cells
-                  r = r[:num_cols]
-                fixed_rows.append(r)
-
-            return pd.DataFrame(fixed_rows, columns=header)
-
-
         questions = examples["statement"]
-        tables = list(map(_convert_table_text_to_pandas, examples["table_text"]))
-        result = tokenizer(tables, questions, padding=padding, max_length=max_seq_length, truncation=True)
+        tables = examples["table_text"]
+
+        # TAPEX-style linearization: table + claim
+        inputs = [
+            table + " </s> " + question
+            for table, question in zip(tables, questions)
+        ]
+
+        result = tokenizer(
+            inputs,
+            padding=padding,
+            max_length=max_seq_length,
+            truncation=True,
+        )
 
         result["label"] = examples["label"]
         return result
+
+
+        # questions = examples["statement"]
+        # tables = list(map(_convert_table_text_to_pandas, examples["table_text"]))
+        # result = tokenizer(tables, questions, padding=padding, max_length=max_seq_length, truncation=True)
+
+        # result["label"] = examples["label"]
+        # return result
 
     with training_args.main_process_first(desc="dataset map pre-processing"):
         raw_datasets = raw_datasets.map(
@@ -423,12 +422,13 @@ def main():
         return {"accuracy": (preds == p.label_ids).astype(np.float32).mean().item()}
 
     # Data collator will default to DataCollatorWithPadding, so we change it if we already did the padding.
-    if data_args.pad_to_max_length:
-        data_collator = default_data_collator
-    elif training_args.fp16:
-        data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
-    else:
-        data_collator = None
+    # if data_args.pad_to_max_length:
+    #     data_collator = default_data_collator
+    # elif training_args.fp16:
+    #     data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
+    # else:
+    #     data_collator = None
+    data_collator = DataCollatorWithPadding(tokenizer)
 
     # Initialize our Trainer
     trainer = Trainer(
@@ -437,7 +437,7 @@ def main():
         train_dataset=train_dataset if training_args.do_train else None,
         eval_dataset=eval_dataset if training_args.do_eval else None,
         compute_metrics=compute_metrics,
-        tokenizer=tokenizer,
+        # tokenizer=tokenizer,
         data_collator=data_collator,
     )
 

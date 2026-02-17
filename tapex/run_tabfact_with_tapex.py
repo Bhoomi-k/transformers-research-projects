@@ -358,16 +358,17 @@ def main():
         tables = examples["table_text"]
 
         # TAPEX-style linearization: table + claim
-        inputs = [
-            table + " </s> " + question
-            for table, question in zip(tables, questions)
-        ]
+        # inputs = [
+        #     table + " </s> " + question
+        #     for table, question in zip(tables, questions)
+        # ]
 
         result = tokenizer(
-            inputs,
-            padding=padding,
-            max_length=max_seq_length,
+            tables,
+            questions,
+            padding="max_length",
             truncation=True,
+            max_length=max_seq_length,
         )
 
         result["label"] = examples["label"]
@@ -504,4 +505,3 @@ def _mp_fn(index):
 
 if __name__ == "__main__":
     main()
-

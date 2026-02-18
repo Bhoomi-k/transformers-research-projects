@@ -34,11 +34,11 @@ from datasets import load_dataset
 import transformers
 from transformers import (
     AutoConfig,
-    BartForSequenceClassification,
+    AutoModelForSequenceClassification,
     DataCollatorWithPadding,
     EvalPrediction,
     HfArgumentParser,
-    BartTokenizer,
+    AutoTokenizer,
     Trainer,
     TrainingArguments,
     default_data_collator,
@@ -319,21 +319,22 @@ def main():
     # TAPEX tokenization is now loaded via AutoTokenizer with remote code.
 
     # TAPEX uses BART + SentencePiece → must use slow BartTokenizer
-    tokenizer = BartTokenizer.from_pretrained(
+    tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
-        add_prefix_space=True,
+        use_fast=False,
+        trust_remote_code=True,
     )
 
 
-    model = BartForSequenceClassification.from_pretrained(
+
+    model = AutoModelForSequenceClassification.from_pretrained(
         model_args.model_name_or_path,
-        from_tf=bool(".ckpt" in model_args.model_name_or_path),
         config=config,
         cache_dir=model_args.cache_dir,
-        revision=model_args.model_revision,
-        token=True if model_args.use_auth_token else None,
+        trust_remote_code=True,
     )
+
 
     # Padding strategy
     if data_args.pad_to_max_length:
@@ -355,24 +356,26 @@ def main():
 
     def preprocess_tabfact_function(examples):
         questions = examples["statement"]
-        tables = examples["table_text"]
 
-        # TAPEX-style linearization: table + claim
-        # inputs = [
-        #     table + " </s> " + question
-        #     for table, question in zip(tables, questions)
-        # ]
+        # Convert dict → pandas DataFrame
+        tables = [
+            pd.DataFrame(t["rows"], columns=t["header"])
+            for t in examples["table_text"]
+        ]
 
         result = tokenizer(
-            tables,
-            questions,
+            table=tables,
+            query=questions,
             padding="max_length",
             truncation=True,
             max_length=max_seq_length,
         )
 
-        result["label"] = examples["label"]
+        # VERY IMPORTANT: rename to "labels"
+        result["labels"] = examples["label"]
+
         return result
+
 
 
         # questions = examples["statement"]
@@ -389,6 +392,12 @@ def main():
             load_from_cache_file=not data_args.overwrite_cache,
             desc="Running tokenizer on dataset",
         )
+
+    # Remove original text columns (Trainer only needs tokenized tensors)
+    raw_datasets = raw_datasets.remove_columns(
+        ["statement", "table_text", "label"]
+    )
+
     if training_args.do_train:
         if "train" not in raw_datasets:
             raise ValueError("--do_train requires a train dataset")
